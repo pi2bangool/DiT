@@ -1,0 +1,4 @@
+slurm-*.out
+sbatch-out.txt
+pretrained_models/*
+*.pyc

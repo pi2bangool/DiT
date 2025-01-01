@@ -178,6 +178,11 @@ class DiT(nn.Module):
         ])
         self.final_layer = FinalLayer(hidden_size, patch_size, self.out_channels)
         self.initialize_weights()
+        self.prev_x = [np.array([0]) for _ in range(depth)]
+        self.L2N = {
+            "prev": [],
+            "prev+momentum": []
+		}
 
     def initialize_weights(self):
         # Initialize transformer layers:
@@ -241,8 +246,21 @@ class DiT(nn.Module):
         t = self.t_embedder(t)                   # (N, D)
         y = self.y_embedder(y, self.training)    # (N, D)
         c = t + y                                # (N, D)
-        for block in self.blocks:
+        L2N = {
+            "prev": [],
+            "prev+momentum": []
+		}
+        x_cpu = x.cpu().detach().numpy()
+        for idx, block in enumerate(self.blocks):
+            momentum = x_cpu - self.prev_x[idx]
+            self.prev_x[idx] = x_cpu
             x = block(x, c)                      # (N, T, D)
+            x_cpu = x.cpu().detach().numpy()
+            L2N["prev"].append(np.linalg.norm(x_cpu - self.prev_x[idx]))
+            L2N["prev+momentum"].append(np.linalg.norm(x_cpu - self.prev_x[idx] - momentum))
+        self.L2N["prev"].append(L2N["prev"])
+        self.L2N["prev+momentum"].append(L2N["prev+momentum"])
+            
         x = self.final_layer(x, c)                # (N, T, patch_size ** 2 * out_channels)
         x = self.unpatchify(x)                   # (N, out_channels, H, W)
         return x
